@@ -16,14 +16,11 @@ def get_drive_service():
         creds.refresh(Request())
     return build('drive', 'v3', credentials=creds)
 
-def analyze_image_direct(image_bytes):
-    # ライブラリを使わず、直接APIエンドポイントへPOSTする
+def analyze_image_final(image_bytes):
+    # 【最重要修正】APIバージョンをv1betaからv1に変更し、404を回避
     api_key = st.secrets["GOOGLE_API_KEY"]
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
     
-    headers = {'Content-Type': 'application/json'}
-    
-    # 画像をBase64変換
     encoded_image = base64.b64encode(image_bytes).decode('utf-8')
     
     payload = {
@@ -35,18 +32,19 @@ def analyze_image_direct(image_bytes):
         }]
     }
     
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers={'Content-Type': 'application/json'}, json=payload)
     res_json = response.json()
     
     if response.status_code == 200:
         return res_json['candidates'][0]['content']['parts'][0]['text']
     else:
-        return f"🚨 API直接通信エラー ({response.status_code}): {json.dumps(res_json)}"
+        # 万が一のためにエラーの詳細はログに出す
+        return f"AI解析に失敗しました。詳細: {response.text}"
 
 def main():
     st.set_page_config(page_title="行政書士 爆速復習", layout="wide")
-    st.title("🔥 今日の復習リスト（直通版）")
-    
+    st.title("🔥 今日の復習リスト")
+
     try:
         service = get_drive_service()
         folder_id = st.secrets["DRIVE_FOLDER_ID"]
@@ -67,7 +65,7 @@ def main():
                 st.subheader(f"📝 項目 {i+1}: {f['name']}")
                 
                 if f['id'] not in st.session_state['results']:
-                    with st.spinner("AI直通解析中..."):
+                    with st.status(f"項目 {i+1} を解析中...", expanded=True):
                         try:
                             request = service.files().get_media(fileId=f['id'])
                             fh = io.BytesIO()
@@ -76,9 +74,7 @@ def main():
                             while not done:
                                 _, done = downloader.next_chunk()
                             
-                            # AIに直接送信
-                            result_text = analyze_image_direct(fh.getvalue())
-                            st.session_state['results'][f['id']] = result_text
+                            st.session_state['results'][f['id']] = analyze_image_final(fh.getvalue())
                         except Exception as e:
                             st.error(f"取得失敗: {str(e)}")
                             continue
