@@ -20,17 +20,14 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- Googleドライブ認証 ---
 def get_drive_service():
-    creds = None
-    # 認証トークンがあれば再利用
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    if not creds or not creds.valid:
-        flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-        creds = flow.run_local_server(port=0)
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
+    # Secretsから合鍵（TOKEN_JSON）を読み込む
+    import json
+    token_info = json.loads(st.secrets["GOOGLE_TOKEN_JSON"])
+    creds = Credentials.from_authorized_user_info(token_info, SCOPES)
+    
+    # 合鍵を使ってドライブに接続する
     return build('drive', 'v3', credentials=creds)
-
+    
 service = get_drive_service()
 
 # --- フォルダ内の画像取得とスケジュール管理 ---
@@ -71,4 +68,5 @@ else:
             if st.button("AIクイズ生成", key=f['id']):
                 with st.spinner("思考中..."):
                     res = model.generate_content(["この画像から一問一答を3問作成してください。", img])
+
                     st.info(res.text)
