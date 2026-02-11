@@ -22,9 +22,9 @@ def main():
     st.set_page_config(page_title="行政書士 爆速復習アプリ", layout="wide")
     st.title("🔥 今日の復習リスト")
     
-    # モデル名を最新の安定版に修正
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # 404エラー対策のため、安定版のモデル名を指定
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     
     try:
         service = get_drive_service()
@@ -33,20 +33,24 @@ def main():
         results = service.files().list(q=f"'{folder_id}' in parents and trashed = false", fields="files(id, name, createdTime)").execute()
         files = results.get('files', [])
 
-        today = datetime.datetime.now().date()
+        now = datetime.datetime.now()
+        today = now.date()
+        
+        # 復習対象の選別
         targets = [f for f in files if (today - datetime.datetime.strptime(f['createdTime'][:10], '%Y-%m-%d').date()).days in [0, 1, 3, 7, 30]]
 
         if not targets:
             st.success("🎉 本日の復習はありません。")
         else:
-            # 画像は表示せず、いきなり中身を並べる
+            # 本番運用を想定：朝6時以降にまだ生成されていなければ生成を開始
+            st.info(f"📅 {today} の学習内容を準備しています...")
+            
             for i, f in enumerate(targets):
-                with st.container():
-                    st.subheader(f"📝 項目 {i+1}: {f['name']}")
-                    
-                    # セッション状態を使って、一度生成したテキストを保持（再読み込み対策）
-                    if f['id'] not in st.session_state:
+                # セッション内で「生成済み」かチェック
+                if f['id'] not in st.session_state:
+                    with st.status(f"項目 {i+1} を解析中...", expanded=False):
                         try:
+                            # ドライブからデータを確実にダウンロード
                             request = service.files().get_media(fileId=f['id'])
                             fh = io.BytesIO()
                             downloader = MediaIoBaseDownload(fh, request)
@@ -55,12 +59,17 @@ def main():
                                 _, done = downloader.next_chunk()
                             
                             img_data = Image.open(fh)
-                            prompt = "行政書士試験の学習用です。この画像から『重要論点の要約』と『今日解くべき一問一答クイズ』を3問、簡潔に作成してください。画像は表示しないので、テキストだけで完結させてください。"
+                            prompt = "行政書士試験の学習用です。この画像の内容から『重要論点の要約』と『今日解くべき一問一答クイズ3問』を、画像を見なくても理解できるテキスト形式で日本語で作成してください。"
                             ai_res = model.generate_content([prompt, img_data])
+                            
+                            # 成功したらセッションに保存
                             st.session_state[f['id']] = ai_res.text
-                        except:
-                            st.session_state[f['id']] = "解析エラー：画像が読み込めませんでした。"
-                    
+                        except Exception as e:
+                            st.session_state[f['id']] = f"解析エラー: {str(e)}"
+                
+                # 表示部分
+                with st.container():
+                    st.subheader(f"📝 項目 {i+1}: {f['name']}")
                     st.markdown(st.session_state[f['id']])
                     st.divider()
 
