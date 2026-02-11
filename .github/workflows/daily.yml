@@ -1,0 +1,22 @@
+name: Daily Notification
+on:
+  schedule:
+    - cron: '0 21 * * *' # 日本時間 朝6時
+jobs:
+  check_and_mail:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install google-api-python-client google-auth-oauthlib
+      - name: Run script
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          # 以下は少し複雑なので、まずは「Secrets」の登録から行いましょう
+        run: python send_mail.py
