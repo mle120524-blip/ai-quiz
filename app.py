@@ -1,11 +1,11 @@
 import streamlit as st
 import google.generativeai as genai
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from PIL import Image
 import io
-import requests
 import datetime
 import json
 
@@ -40,28 +40,30 @@ def main():
         else:
             st.warning(f"📝 今日は {len(targets)} 件の復習があります。")
             
-            # 【一括解析】
             if st.button("🚀 今日の全問題を一括で解く"):
                 for i, f in enumerate(targets):
                     st.divider()
                     st.subheader(f"第 {i+1} 問: {f['name']}")
                     
-                    # 画像の取得と表示
-                    img_url = f"https://drive.google.com/uc?id={f['id']}"
-                    st.image(img_url, use_container_width=True)
-                    
-                    with st.spinner("AIが内容を分析中..."):
+                    with st.spinner("画像を読み込んで解析中..."):
                         try:
-                            # 画像データを直接読み込んでAIに渡す
-                            response = requests.get(img_url)
-                            img_data = Image.open(io.BytesIO(response.content))
+                            # 【修正ポイント】URLではなく、ドライブから直接バイナリをダウンロード
+                            request = service.files().get_media(fileId=f['id'])
+                            fh = io.BytesIO()
+                            downloader = MediaIoBaseDownload(fh, request)
+                            done = False
+                            while done is False:
+                                status, done = downloader.next_chunk()
                             
-                            prompt = "この画像は行政書士試験の学習資料です。内容を分析し、1.重要論点の要約 2.この内容から予想される一問一答クイズ を作成してください。"
+                            img_data = Image.open(fh)
+                            st.image(img_data, use_container_width=True)
+                            
+                            prompt = "この画像は行政書士試験の学習資料です。内容を分析し、1.重要論点の要約 2.この内容から予想される一問一答クイズ を日本語で作成してください。"
                             ai_res = model.generate_content([prompt, img_data])
                             
                             st.markdown(ai_res.text)
                         except Exception as ai_err:
-                            st.error("AI解析に失敗しました。画像が読み込めない可能性があります。")
+                            st.error(f"解析エラー: {str(ai_err)}")
 
     except Exception as e:
         st.error(f"⚠️ エラー: {str(e)}")
