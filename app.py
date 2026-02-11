@@ -20,12 +20,12 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- Googleドライブ認証 ---
 def get_drive_service():
-    # Secretsから合鍵（TOKEN_JSON）を読み込む
     import json
+    # すでにSecretsに貼ってくれた「合鍵」をここで読み込みます
     token_info = json.loads(st.secrets["GOOGLE_TOKEN_JSON"])
     creds = Credentials.from_authorized_user_info(token_info, SCOPES)
     
-    # 合鍵を使ってドライブに接続する
+    # 読み込んだ合鍵でドライブに接続します
     return build('drive', 'v3', credentials=creds)
     
 service = get_drive_service()
@@ -70,3 +70,4 @@ else:
                     res = model.generate_content(["この画像から一問一答を3問作成してください。", img])
 
                     st.info(res.text)
+
