@@ -19,9 +19,10 @@ def get_drive_service():
     return build('drive', 'v3', credentials=creds)
 
 def main():
-    st.set_page_config(page_title="行政書士 爆速復習アプリ", layout="centered")
-    st.title("🔥 行政書士 爆速復習")
+    st.set_page_config(page_title="行政書士 爆速復習アプリ", layout="wide")
+    st.title("🔥 今日の復習リスト")
     
+    # モデル名を最新の安定版に修正
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     model = genai.GenerativeModel('gemini-1.5-flash')
     
@@ -38,35 +39,33 @@ def main():
         if not targets:
             st.success("🎉 本日の復習はありません。")
         else:
-            st.warning(f"📝 今日は {len(targets)} 件の復習があります。")
-            
-            if st.button("🚀 今日の全問題を一括で解く"):
-                for i, f in enumerate(targets):
-                    st.divider()
-                    st.subheader(f"第 {i+1} 問: {f['name']}")
+            # 画像は表示せず、いきなり中身を並べる
+            for i, f in enumerate(targets):
+                with st.container():
+                    st.subheader(f"📝 項目 {i+1}: {f['name']}")
                     
-                    with st.spinner("画像を読み込んで解析中..."):
+                    # セッション状態を使って、一度生成したテキストを保持（再読み込み対策）
+                    if f['id'] not in st.session_state:
                         try:
-                            # 【修正ポイント】URLではなく、ドライブから直接バイナリをダウンロード
                             request = service.files().get_media(fileId=f['id'])
                             fh = io.BytesIO()
                             downloader = MediaIoBaseDownload(fh, request)
                             done = False
-                            while done is False:
-                                status, done = downloader.next_chunk()
+                            while not done:
+                                _, done = downloader.next_chunk()
                             
                             img_data = Image.open(fh)
-                            st.image(img_data, use_container_width=True)
-                            
-                            prompt = "この画像は行政書士試験の学習資料です。内容を分析し、1.重要論点の要約 2.この内容から予想される一問一答クイズ を日本語で作成してください。"
+                            prompt = "行政書士試験の学習用です。この画像から『重要論点の要約』と『今日解くべき一問一答クイズ』を3問、簡潔に作成してください。画像は表示しないので、テキストだけで完結させてください。"
                             ai_res = model.generate_content([prompt, img_data])
-                            
-                            st.markdown(ai_res.text)
-                        except Exception as ai_err:
-                            st.error(f"解析エラー: {str(ai_err)}")
+                            st.session_state[f['id']] = ai_res.text
+                        except:
+                            st.session_state[f['id']] = "解析エラー：画像が読み込めませんでした。"
+                    
+                    st.markdown(st.session_state[f['id']])
+                    st.divider()
 
     except Exception as e:
-        st.error(f"⚠️ エラー: {str(e)}")
+        st.error(f"⚠️ システムエラー: {str(e)}")
 
 if __name__ == "__main__":
     main()
